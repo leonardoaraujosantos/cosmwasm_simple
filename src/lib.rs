@@ -3,11 +3,10 @@ use cosmwasm_std::{
     CosmosMsg, AnyMsg, 
 };
 mod msg;
-mod proto;
 mod state;
-use crate::msg::{ExecuteMsg, QueryMsg, CountResp, QueryResp};
-use crate::proto::encode_protobuf_message;
+use crate::msg::{ExecuteMsg, QueryMsg, CountResp, QueryResp, MsgOraclePushResult};
 use crate::state::{initialize_counter, load_counter, increment_counter};
+use prost::Message; 
 
 #[entry_point]
 pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, _msg: Empty) -> StdResult<Response> {
@@ -34,11 +33,18 @@ fn execute_increment(deps: DepsMut) -> StdResult<Response> {
 }
 
 fn execute_push_oracle_result(job_id: u64, results_json: String, sender: String) -> StdResult<Response> {
-    let protobuf_bytes = encode_protobuf_message(&sender, job_id, &results_json);
+    let msg = MsgOraclePushResult {
+        creator: sender,
+        job_id,
+        results_json,
+    };
     
+    let mut buf = Vec::new();
+    msg.encode(&mut buf).unwrap(); // Encode to protobuf bytes
+
     let msg = CosmosMsg::Any(AnyMsg {
         type_url: "/aminichain.apigateway.MsgOraclePushResult".to_string(),
-        value: Binary::from(protobuf_bytes),
+        value: Binary::from(buf),
     });
 
     Ok(Response::new()
