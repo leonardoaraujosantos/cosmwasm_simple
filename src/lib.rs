@@ -15,11 +15,11 @@ pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, _msg: Empty) ->
 }
 
 #[entry_point]
-pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         ExecuteMsg::Increment{} => execute_increment(deps),
         ExecuteMsg::PushOracleResult { job_id, results_json } => {
-            execute_push_oracle_result(job_id, results_json, info.sender.to_string(), _env)
+            execute_push_oracle_result(job_id, results_json, info.sender.to_string(), env)
         }
     }
 }
@@ -33,32 +33,36 @@ fn execute_increment(deps: DepsMut) -> StdResult<Response> {
 }
 
 fn execute_push_oracle_result(job_id: u64, results_json: String, sender: String, env: Env) -> StdResult<Response> {
+    // ✅ Create a Protobuf message for `MsgOraclePushResult` that will be executed by the blockchain
     let msg = MsgOraclePushResult {
         creator: sender.clone(),
         job_id,
         results_json,
     };
-    
-    // Encode MsgOraclePushResult as Protobuf Any (for MsgExec)
+    // Encode MsgOraclePushResult as Protobuf of type Any
     let mut buf = Vec::new();
     msg.encode(&mut buf).unwrap();
 
-    let oracle_msg = Any {  // ✅ Use Protobuf Any for MsgExec
+    // Preprare Custom message Call to /aminichain.apigateway.MsgOraclePushResult
+    let oracle_msg = Any {  
         type_url: "/aminichain.apigateway.MsgOraclePushResult".to_string(),
         value: buf,
     };
 
-    // Wrap inside MsgExec (Authorization Execution)
+    // ✅ Wrap `oracle_msg` inside `MsgExec` for Authz execution
+    // 🔹 The grantee is the contract itself, allowing it to execute the message with delegated permission.
     let exec_msg = MsgExec {
         grantee: env.contract.address.to_string(),
         msgs: vec![oracle_msg],  // ✅ Use Protobuf Any inside MsgExec
     };
     
+    // Encode MsgExec as Protobuf of type Any
     let mut exec_buf = Vec::new();
     exec_msg.encode(&mut exec_buf).unwrap();
 
-    // Convert MsgExec to CosmWasm AnyMsg for sending as CosmosMsg::Any
-    let msg_exec = CosmosMsg::Any(AnyMsg {  // ✅ Convert Protobuf Any to CosmWasm AnyMsg
+    // Preprare Authz message Call to /cosmos.authz.v1beta1.MsgExec
+    // 🔹 This is still Protobuf-encoded
+    let msg_exec = CosmosMsg::Any(AnyMsg { 
         type_url: "/cosmos.authz.v1beta1.MsgExec".to_string(),
         value: Binary::from(exec_buf),
     });
