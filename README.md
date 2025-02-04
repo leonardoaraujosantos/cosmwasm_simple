@@ -8,4 +8,5 @@ Simple contract
 
 ```bash
 cargo build --release --target wasm32-unknown-unknown
+cosmwasm-check ./target/wasm32-unknown-unknown/release/contract.wasm    
 ```
